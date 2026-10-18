@@ -1,0 +1,255 @@
+// Prisma Schema para KURI Backend
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  phone        String?
+  name         String
+  passwordHash String
+  role         String   @default("CUSTOMER") // SUPER_ADMIN, STORE_OWNER, STORE_STAFF, CUSTOMER
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedStores         Store[]              @relation("StoreOwner")
+  staffStore          Store?               @relation("StoreStaff", fields: [staffStoreId], references: [id])
+  staffStoreId        String?
+  keychains           Keychain[]           @relation("CustomerKeychains")
+  loyalties           CustomerLoyalty[]    @relation("CustomerLoyalties")
+  transactionsAsStaff LoyaltyTransaction[] @relation("StaffTransactions")
+  transactionsAsUser  LoyaltyTransaction[] @relation("UserTransactions")
+  redemptions         RewardRedemption[]   @relation("CustomerRedemptions")
+}
+
+model Store {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  tagLine      String?
+  description  String?
+  logoUrl      String?
+  bannerUrl    String?
+  address      String?
+  phone        String?
+  whatsapp     String?
+  email        String?
+  facebook     String?
+  instagram    String?
+  mapUrl       String?
+  category     String   @default("Cafetería y Restaurante")
+  scheduleText String?  @default("Lunes a Sábado: 08:00 - 20:00")
+  scheduleMode String   @default("AUTO") // AUTO, MANUAL
+  isOpenManual Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownerId      String
+  owner        User     @relation("StoreOwner", fields: [ownerId], references: [id])
+  staffMembers User[]   @relation("StoreStaff")
+
+  // Control de Mensualidad y Suscripción adaptada por el SuperAdmin
+  subscriptionStatus   String                @default("ACTIVE") // ACTIVE, SUSPENDED, PAST_DUE
+  monthlyFee           Float                 @default(29.0)     // Tarifa personalizada en USD
+  billingDueDay        Int                   @default(1)        // Día de pago mensual
+  nextBillingDate      DateTime              @default(now())    // Próxima fecha de corte
+  lastPaymentDate      DateTime?
+  subscriptionNotes    String?
+  subscriptionPayments SubscriptionPayment[]
+
+  products       Product[]
+  campaign       Campaign?
+  keychains      Keychain[]
+  loyalties      CustomerLoyalty[]
+  rewards        Reward[]
+  transactions   LoyaltyTransaction[]
+  redemptions    RewardRedemption[]
+  schedules      StoreSchedule[]
+  keychainOrders KeychainOrder[]
+  promoCampaigns StorePromoCampaign[]
+}
+
+model StoreSchedule {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  dayOfWeek Int      // 1: Lunes, 2: Martes, 3: Miércoles, 4: Jueves, 5: Viernes, 6: Sábado, 7: Domingo
+  openTime  String   @default("08:00") // Formato "HH:mm"
+  closeTime String   @default("20:00") // Formato "HH:mm"
+  isOpen    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, dayOfWeek])
+}
+
+model KeychainOrder {
+  id              String   @id @default(cuid())
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  quantity        Int      @default(50)
+  deliveryAddress String
+  contactPhone    String
+  recipientName   String
+  notes           String?
+  status          String   @default("PENDING") // PENDING, IN_PRODUCTION, SHIPPED, DELIVERED, CANCELLED
+  trackingNumber  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model StorePromoCampaign {
+  id              String    @id @default(cuid())
+  storeId         String
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name            String
+  type            String    @default("KEYCHAIN_DISCOUNT") // KEYCHAIN_DISCOUNT, VISIT_MULTIPLIER, SPECIAL_EVENT
+  description     String?
+  discountPercent Float?    @default(10.0)
+  multiplier      Int?      @default(2)
+  startDate       DateTime?
+  endDate         DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model SubscriptionPayment {
+  id            String   @id @default(cuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  amount        Float
+  status        String   @default("PAID") // PAID, PENDING, CANCELLED
+  paymentMethod String   @default("TRANSFER") // TRANSFER, CASH, CARD, OTHER
+  paidAt        DateTime @default(now())
+  periodCovered String?  // Ej: "Octubre 2026"
+  reference     String?  // Ej: Comprobante de depósito o ref bancaria
+  notes         String?
+  createdAt     DateTime @default(now())
+}
+
+model Product {
+  id                String   @id @default(cuid())
+  storeId           String
+  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  price             Float
+  discountGoldPrice Float?
+  category          String   @default("Destacados")
+  imageUrl          String?
+  isAvailable       Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Campaign {
+  id              String   @id @default(cuid())
+  storeId         String   @unique
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name            String   @default("Programa de Fidelidad Principal")
+  description     String?  @default("Acumula Oro con cada visita o compra y canjea Tesoros exclusivos")
+  type            String   @default("VISIT_STAMP") // VISIT_STAMP, PURCHASE_AMOUNT, KEYCHAIN_DISCOUNT
+  goldPerVisit    Int      @default(1)
+  goldRatioAmount Float    @default(10.0)
+  discountPercent Float?   @default(10.0)
+  cooldownMinutes Int      @default(45)
+  maxDailyPoints  Int      @default(3)
+  isActive        Boolean  @default(true)
+  bannerNotice    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Keychain {
+  id          String   @id @default(cuid())
+  token       String   @unique
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customerId  String?
+  customer    User?    @relation("CustomerKeychains", fields: [customerId], references: [id])
+  status      String   @default("ASSIGNED_STORE") // UNASSIGNED, ASSIGNED_STORE, ACTIVATED_USER, LOST
+  batchNumber String   @default("BATCH-2026-01")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions LoyaltyTransaction[]
+}
+
+model CustomerLoyalty {
+  id           String   @id @default(cuid())
+  customerId   String
+  customer     User     @relation("CustomerLoyalties", fields: [customerId], references: [id], onDelete: Cascade)
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  currentGold  Int      @default(0)
+  lifetimeGold Int      @default(0)
+  tier         String   @default("BRONZE") // BRONZE, SILVER, GOLD
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([customerId, storeId])
+}
+
+model LoyaltyTransaction {
+  id          String    @id @default(cuid())
+  storeId     String
+  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customerId  String?
+  customer    User?     @relation("UserTransactions", fields: [customerId], references: [id])
+  keychainId  String?
+  keychain    Keychain? @relation(fields: [keychainId], references: [id])
+  staffId     String
+  staff       User      @relation("StaffTransactions", fields: [staffId], references: [id])
+  goldAmount  Int
+  type        String    @default("VISIT")
+  note        String?
+  createdAt   DateTime  @default(now())
+}
+
+model Reward {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  costInGold  Int
+  stock       Int      @default(999)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  redemptions RewardRedemption[]
+}
+
+model RewardRedemption {
+  id             String   @id @default(cuid())
+  storeId        String
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       User     @relation("CustomerRedemptions", fields: [customerId], references: [id], onDelete: Cascade)
+  rewardId       String
+  reward         Reward   @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  staffId        String?
+  goldSpent      Int
+  status         String   @default("REDEEMED")
+  redemptionCode String   @unique
+  createdAt      DateTime @default(now())
+}
+
+model UnclaimedLedger {
+  id            String   @id @default(cuid())
+  keychainToken String
+  storeId       String
+  goldAmount    Int      @default(1)
+  staffId       String
+  isClaimed     Boolean  @default(false)
+  claimedAt     DateTime?
+  createdAt     DateTime @default(now())
+}

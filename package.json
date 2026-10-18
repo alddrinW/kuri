@@ -1,0 +1,17 @@
+{
+  "name": "kuri-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KURI - Plataforma de fidelización física con QR permanente (Arquitectura Desacoplada en Capas Backend + Frontend)",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "seed": "npm --prefix backend run prisma:seed",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  }
+}
